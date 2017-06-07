@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Particulate - view ichthyop output on leaflet maps</title>
+
+<meta charset="utf-8">
+<link rel="icon" href="static/img/favicon.ico">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico" />
+<link rel="stylesheet" href="static/css/leaflet.css" />
+<script src="static/js/leaflet.js"></script>
+<script src="static/js/jquery.min.js"></script>
+<link rel="stylesheet" href="static/css/bootstrap.min.css">
+<link rel="stylesheet" href="static/css/bootstrap-theme.min.css">
+<link rel="stylesheet" href="static/css/bootstrap-editable.css">
+<script src="static/js/bootstrap.min.js"></script>
+<link rel="stylesheet" href="static/css/leaflet.timedimension.control.min.css" />
+<link rel="stylesheet" href="static/css/Control.LatLng.css" />
+<script type="text/javascript" src="static/js/leaflet.timedimension.min.js"></script>
+<script type="text/javascript" src="static/js/netcdfjs.min.js"></script>
+<script type="text/javascript" src="static/js/iso8601.js"></script>
+<script type="text/javascript" src="static/js/iso8601.min.js"></script>
+<script type="text/javascript" src="static/js/heatmap.min.js"></script>
+<script type="text/javascript" src="static/js/leaflet-heatmap.js"></script>
+
+<script type="text/javascript" src="static/js/Leaflet.CanvasLayer.js"></script>
+<script type="text/javascript" src="static/js/Control.LatLng.js"></script>
+<script type="text/javascript" src="static/js/Leaflet.TimeDimension.sodaHeatMap.js"></script>
+<script src="static/js/bootstrap-editable.min.js"></script>
+
+<script src="static/js/html2canvas/html2canvas.js"></script>
+<script src="static/js/leaflet_export.js"></script>
+<style type="text/css">
+.map { height: 600px; width: 75%;}
+</style>
+</style>
+<script>
+$.fn.editable.defaults.mode = 'inline';
+var map = undefined;
+var image_basename = 'map';
+$(document).ready(function(){
+	httpGetNetCDF('example.nc');
+	$("#ncfile").on('change',handleFileSelect);
+});
+</script>
+</head>
+<body>
+<div style="float: left;" class="map" id="play_map"></div>
+	<div style="float: right; width: 25%; padding: 5px;">
+	<h1><a href=".">Particulate</a></h1>
+	<p><span class="lead">View <a href="//www.ichthyop.org">Ichthyop</a> particles in <a href="//leafletjs.com">Leaflet</a>.</span></p>
+
+	<label class="btn btn-success btn-file">
+		Upload NetCDF <input id="ncfile" type="file" style="display: none;">
+	</label>
+	  <div class="form-group">
+		<label for="image_caption">Image Caption:</label>
+		<textarea class="form-control" rows="5" id='image_caption'>Location of Particles</textarea>
+	</div>
+	<div class="form-group">
+		<label>Time Display Format</label>
+	<div class="radio">
+	  <label><input type="radio" name="timedisplay" value="utctime" checked><span id="utctime"></span></label>
+	</div>
+	<div class="radio">
+	  <label><input type="radio" name="timedisplay" value="localtime"><span id="localtime"></span></label>
+	</div>
+	</div>
+		<button class='btn btn-success' id="exportWithCaptionBtn" onclick="downloadMap();">Save Current Image</button>
+		<br/><br/>
+		<p>Particulate is brought to you by the <a href="http://www.marine.ie/">Irish Marine Institute</a>.</p>
+
+	</div>
+
+<script>
+var current_draw = 0;
+var colour_layer = function(series){
+  return {
+     draw_points: function(this_draw,series,i,info,canvasWidth,canvasData){
+       if( i== series.length || this_draw != current_draw){
+         if(this_draw == current_draw){
+           var ctx = info.canvas.getContext('2d');
+           ctx.putImageData(canvasData,0,0);
+         }
+         return;
+       }
+       var color1 = '1111FF';
+       var color2 = 'FFFFFF';
+       var ratio = (i+1)/series.length;
+       var r = Math.ceil(parseInt(color2.substring(0,2), 16) * ratio + parseInt(color1.substring(0,2), 16) * (1-ratio));
+       var g = Math.ceil(parseInt(color2.substring(2,4), 16) * ratio + parseInt(color1.substring(2,4), 16) * (1-ratio));
+       var b = Math.ceil(parseInt(color2.substring(4,6), 16) * ratio + parseInt(color1.substring(4,6), 16) * (1-ratio));
+       var a = 255;//130 + Math.round(ratio*125);
+       var points = series[i].points;
+       for(var j=0;j<points.length;j++){
+          if(info.bounds.contains([points[j][0],points[j][1]])){
+              var dot = info.layer._map.latLngToContainerPoint([points[j][0], points[j][1]]);
+              var index = (dot.x+dot.y*canvasWidth)*4;
+              if(canvasData.data[index + 3] == 0){
+                canvasData.data[index + 0] = r;
+                canvasData.data[index + 1] = g;
+                canvasData.data[index + 2] = b;
+                canvasData.data[index + 3] = a;
+             }
+          }
+       }
+       setTimeout(this.draw_points.bind(this,this_draw,series,i+1,info,canvasWidth,canvasData),0);
+     },
+     onDrawLayer: function(info){
+         var this_draw = ++current_draw;
+         var ctx = info.canvas.getContext('2d');
+         var canvasWidth = info.canvas.width;
+         var canvasHeight = info.canvas.height;
+				 //TODO: fix this blinking problem.
+				 ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+         var canvasData = ctx.getImageData(0,0,canvasWidth,canvasHeight);
+
+         //setTimeout(this.draw_points.bind(this,this_draw,series,0,info,canvasWidth,canvasData),2000);
+         setTimeout(this.draw_points.bind(this,this_draw,series,0,info,canvasWidth,canvasData),0);
+      }
+  };
+}
+
+var create_timeseries_play_map = function(times,series,bounds){
+	  $("#play_map").empty();
+		if(map){
+			map.remove();
+		}
+    map = L.map('play_map', {
+      zoom: 13,
+      fullscreenControl: true,
+      center: bounds.getCenter(),
+			downloadable: true,
+			latLngControl: true,
+   });
+	 map.fitBounds(bounds);
+
+    var timeDimension = new L.TimeDimension({
+         times: times,
+         series: series,
+         currentTime: times[0]
+    });
+    map.timeDimension = timeDimension;
+    var player = new L.TimeDimension.Player({
+        transitionTime: 500,
+        loop: false,
+        buffer: 1
+    }, timeDimension);
+    var timeDimensionControlOptions = {
+          position: 'bottomleft',
+          autoPlay: false,
+          timeSlider: true,
+          loopButton: true,
+          speedSlider: false,
+          player: player
+    };
+    var timeDimensionControl = new L.Control.TimeDimension(timeDimensionControlOptions);
+    map.addControl(timeDimensionControl);
+
+  var osmLayer = L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
+  }).addTo(map);
+	var osmbwLayer = L.tileLayer('http://{s}.tiles.wmflabs.org/bw-mapnik/{z}/{x}/{y}.png', {
+		maxZoom: 18,
+		attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+	});
+  var heatMapLayer = L.timeDimension.layer.sodaHeatMap({series: series});
+  heatMapLayer.addTo(map);
+	var colourLayer = L.canvasLayer().delegate(colour_layer(series));
+	colourLayer.addTo(map);
+
+  L.control.layers({"Colour": osmLayer, "Black & White": osmbwLayer},
+	{"Particles": colourLayer,"Heat Map": heatMapLayer}).addTo(map);
+  return map;
+}
+
+
+var renderNetCDF = function(data,basename){
+    var reader = new netcdfjs(data);
+		image_basename = basename;
+    var time = reader.getDataVariable('time');
+		var lon = reader.getDataVariable('lon');
+		var lat = reader.getDataVariable('lat');
+		if(false){
+			for(var i=0;i<reader.globalAttributes.length;i++){
+				console.log(reader.globalAttributes[i].name+"="+reader.globalAttributes[i].value);
+			}
+			console.log(reader.variables);
+			console.log(time);
+		}
+		//TODO support different time origin, possibly by
+		// checking app.time.initial_time dimension
+		// against time[0]
+		var time_origin = new Date();
+		time_origin.setISO8601("1968-05-23T00:00:00Z");
+
+		//var mortality = reader.getDataVariable('mortality');
+		//var depth = reader.getDataVariable('depth');
+		//var region_edge =reader.getDataVariable('region_edge');
+		var times = [];
+		var series = [];
+		var [latmin,latmax,lonmin,lonmax] = [999,-999,999,-999];
+		for(var i=0;i<time.length;i++){
+			var date = new Date(time_origin.getTime()+time[i]*1000);
+			var points = [];
+			var lats = lat[i];
+			var lons = lon[i];
+			for(var j=0;j<lats.length;j++){
+				points.push([lats[j],lons[j]]);
+				latmin = Math.min(latmin,lats[j]);
+				latmax = Math.max(latmax,lats[j]);
+				lonmin = Math.min(lonmin,lons[j]);
+				lonmax = Math.max(lonmax,lons[j]);
+			}
+			//TODO: non-values
+			series.push({timestamp: date.toISOString2(), points: points});
+			times.push(date.getTime());
+		}
+		map = create_timeseries_play_map(times,series, L.latLngBounds([latmin,lonmin],[latmax,lonmax]));
+  }
+
+</script>
+
+<script>
+if (!Date.prototype.toISOString2) {
+  (function() {
+
+    function pad(number) {
+      if (number < 10) {
+        return '0' + number;
+      }
+      return number;
+    }
+
+    Date.prototype.toISOString2 = function() {
+      return this.getUTCFullYear() +
+        '-' + pad(this.getUTCMonth() + 1) +
+        '-' + pad(this.getUTCDate()) +
+        'T' + pad(this.getUTCHours()) +
+        ':' + pad(this.getUTCMinutes()) +
+        ':' + pad(this.getUTCSeconds()) +
+        'Z';
+    };
+
+  }());
+}
+var reader;
+function abortRead() {  reader.abort(); }
+
+function handleFileSelect(evt) {
+
+  reader = new FileReader();
+  reader.onerror = errorHandler;
+  reader.onabort = function(e) {
+    alert('File read cancelled');
+  };
+  reader.onloadstart = function(e) {
+  };
+  reader.onload = function(e) {
+		renderNetCDF(this.result,basename(evt.target.files[0].name));
+	}
+  reader.readAsArrayBuffer(evt.target.files[0]);
+}
+
+
+function errorHandler(evt) {
+  switch(evt.target.error.code) {
+    case evt.target.error.NOT_FOUND_ERR:
+      alert('File Not Found!'); break;
+    case evt.target.error.NOT_READABLE_ERR:
+      alert('File is not readable');break;
+    case evt.target.error.ABORT_ERR: break;
+    default: alert('An error occurred reading this file.');
+  };
+}
+
+</script>
+<script>
+function afterRender(result) {
+  return result;
+}
+
+function afterExport(result) {
+  return result;
+}
+
+function downloadMap() {
+	var timeformat = $('input[name=timedisplay]:checked').val();
+	var time = $("#"+timeformat).text();
+	var caption = $("#image_caption").val()+"\n"+time;
+	if(timeformat == "utctime"){
+		caption = caption +" (UTC)";
+	}
+	var image_name = (image_basename + "-"+$("#utctime").text()).replace(/[^\w_\-]+/g,"");
+
+  var downloadOptions =   {
+    caption: {
+      text: caption,
+      font: 'Arial',
+			fontSize: 20,
+      fillStyle: 'black',
+      position: [50,520]
+    },
+		container: document.getElementById('play_map'),
+    exclude: ['.leaflet-control-zoom',
+				'.leaflet-control-attribution',
+				'.leaflet-bar-timecontrol',
+				'.leaflet-control-layers'],
+    format: 'image/png',
+    fileName: image_name+'.png',
+    afterRender: afterRender,
+    afterExport: afterExport
+	};
+  var promise = map.downloadExport(downloadOptions);
+  var data = promise.then(function(result){
+     return result;
+  });
+}
+function basename(str)
+{
+   var base = new String(str).substring(str.lastIndexOf('/') + 1);
+    if(base.lastIndexOf(".") != -1)
+        base = base.substring(0, base.lastIndexOf("."));
+   return base;
+}
+var httpGetNetCDF = function(url){
+	var xhr = new XMLHttpRequest();
+	xhr.open("GET", url, true);
+	xhr.responseType = "arraybuffer";
+	xhr.addEventListener("load", function () {
+		if (xhr.status === 200) {
+			renderNetCDF(xhr.response,basename(url));
+		}
+	});
+	xhr.send();
+}
+</script>
+</body>
+</html>
