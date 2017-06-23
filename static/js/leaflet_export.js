@@ -73,10 +73,56 @@
 					ctx.fillStyle = textColor;
 					ctx.translate(posX, posY);
 					ctx.rotate(rotation * Math.PI / 180);
-					for (i = 0; i < lines.length; i++) {
+					for (var i = 0; i < lines.length; i++) {
 						ctx.fillText(lines[i],0, i*fontSize);
 					}
 					ctx.restore();
+				}
+
+				/* fullergalway
+				 * draw a multiline string on corner of canvas
+				 *
+				 * @param ctx (M) context of the canvas
+				 * @param text (M) string may contain \n
+				 * @param gravity(M) topleft, bottomleft, topright, bottomright
+				 * @param textColor color
+				 * @param font must be installed on client use websafe
+				 * @param fonSize in Pixels
+				 * @param margin in Pixels
+				 *
+				 * all (M) params are mandatory - rest is optional
+				 */
+				function drawStringGravity(ctx, text, gravity, textColor, font, fontSize, margin) {
+					var lines = text.split("\n");
+					font = font || "'serif'";
+					fontSize = fontSize || 16;
+					margin = margin || (margin === 0?0:20);
+					ctx.save();
+					ctx.font = fontSize + "px " + font;
+					ctx.fillStyle = textColor;
+					var textWidth = 0;
+					var textHeight = lines.length * fontSize;
+					for (var i = 0; i < lines.length; i++) {
+						textWidth = Math.max(textWidth,ctx.measureText(lines[i]).width);
+					}
+					var width = ctx.canvas.clientWidth || ctx.canvas.width;
+					var height = ctx.canvas.clientHeight || ctx.canvas.height
+					ctx.restore();
+					var posX = margin, posY = margin;
+					switch(gravity){
+						case 'topright':
+							posX = width - textWidth - margin;
+							break;
+						case 'bottomleft':
+							posY = height - textHeight - margin;
+							break;
+						case 'bottomright':
+							posX = width - textWidth - margin;
+							posY = height - textHeight - margin;
+							break;
+					}
+					var rotation = 0;
+					drawString(ctx, text, posX, posY, textColor, rotation, font, fontSize);
 				}
 
         var caption = {};
@@ -197,16 +243,8 @@
             hide[i].removeAttribute('data-html2canvas-ignore');
           }
           if ('text' in caption && caption.text) {
-            var x, y;
-            if ('position' in caption) {
-              x = caption.position[0];
-              y = caption.position[1];
-            } else {
-              x = 0;
-              y = 0;
-            }
             var ctx = canvas.getContext('2d');
-						drawString(ctx, caption.text, x, y, caption.fillStyle, caption.rotation, caption.font, caption.fontSize)
+						drawStringGravity(ctx, caption.text, caption.gravity, caption.fillStyle, caption.font, caption.fontSize, caption.margin);
           }
 
 //           document.body.appendChild(canvas);
