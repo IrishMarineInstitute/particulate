@@ -240,6 +240,8 @@ var renderNetCDF = function(data,basename){
 			var lats = lat[i];
 			var lons = lon[i];
 			for(var j=0;j<lats.length;j++){
+				if(isNaN(lats[j]) || isNaN(lons[j]))
+					continue;
 				points.push([lats[j],lons[j]]);
 				latmin = Math.min(latmin,lats[j]);
 				latmax = Math.max(latmax,lats[j]);
