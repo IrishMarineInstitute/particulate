@@ -220,7 +220,7 @@ var renderNetCDF = function(data,basename){
 				console.log(reader.globalAttributes[i].name+"="+reader.globalAttributes[i].value);
 			}
 			console.log(reader.variables);
-			console.log(time);
+			console.log(lat);
 		}
 		//TODO support different time origin, possibly by
 		// checking app.time.initial_time dimension
@@ -240,6 +240,9 @@ var renderNetCDF = function(data,basename){
 			var lats = lat[i];
 			var lons = lon[i];
 			for(var j=0;j<lats.length;j++){
+				if(isNaN(lats[j]) || isNaN(lons[j])){
+					continue;
+				}
 				points.push([lats[j],lons[j]]);
 				latmin = Math.min(latmin,lats[j]);
 				latmax = Math.max(latmax,lats[j]);
