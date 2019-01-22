@@ -111,8 +111,8 @@ $(document).ready(function(){
 	<button id="share" class="btn btn-success" style="display: block; visibility: hidden"  onclick="handleShareClick();">Copy Share Link</button>
 	<button class='btn btn-success' id="exportWithCaptionBtn" onclick="downloadMap();">Save Current Image</button>
 		<br/><br/>
-		<p>Particulate is brought to you by the <a href="http://www.marine.ie/">Irish Marine Institute</a>.</p>
-		<p><a href="http://github.com/irishmarineinstitute/particulate">View this project on github</a>.</p>
+		<p>Particulate is brought to you by the <a href="https://www.marine.ie/">Irish Marine Institute</a>.</p>
+		<p><a href="https://github.com/irishmarineinstitute/particulate">View this project on github</a>.</p>
 
 	</div>
   </form>
@@ -203,12 +203,12 @@ var create_timeseries_play_map = function(times,series,bounds,initial_time){
     var timeDimensionControl = new L.Control.TimeDimension(timeDimensionControlOptions);
     map.addControl(timeDimensionControl);
 
-  var osmLayer = L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
+  var osmLayer = L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
-	var osmbwLayer = L.tileLayer('http://{s}.tiles.wmflabs.org/bw-mapnik/{z}/{x}/{y}.png', {
+	var osmbwLayer = L.tileLayer('https://{s}.tiles.wmflabs.org/bw-mapnik/{z}/{x}/{y}.png', {
 		maxZoom: 18,
-		attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+		attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 	});
   var heatMapLayer = L.timeDimension.layer.sodaHeatMap({series: series});
   heatMapLayer.addTo(map);
