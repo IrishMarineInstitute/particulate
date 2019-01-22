@@ -39,8 +39,14 @@ $.fn.editable.defaults.mode = 'inline';
 var map = undefined;
 var image_basename = 'map';
 $(document).ready(function(){
-	httpGetNetCDF('example.nc');
+  if(document.location.hash && document.location.hash.length > 1){
+    loadFromDocumentLocationHash();
+  }else{
+    httpGetNetCDF('example.nc');
+  }
 	$("#ncfile").on('change',handleFileSelect);
+  $("#ncfetch").on('click',fetchNcUrl);
+  $(window).on('hashchange', loadFromDocumentLocationHash);
 });
 </script>
 </head>
@@ -49,10 +55,13 @@ $(document).ready(function(){
 	<div style="float: right; width: 25%; padding: 5px;">
 	<h1><a href=".">Particulate</a></h1>
 	<p><span class="lead">View <a href="//www.ichthyop.org">Ichthyop</a> particles in <a href="//leafletjs.com">Leaflet</a>.</span></p>
-
+  <form action="javascript:void(0);" id="params">
 	<label class="btn btn-success btn-file">
-		Upload NetCDF <input id="ncfile" type="file" style="display: none;">
+		Upload a NetCDF File<input id="ncfile" type="file" style="display: none;">
 	</label>
+  <br />
+  <input id="ncurl" type="text" placeholder="Or paste a url here">
+  <button id="ncfetch" class="btn btn-success">Fetch</button>
 	  <div class="form-group">
 		<label for="image_caption">Image Caption:</label>
 		<textarea class="form-control" rows="5" id='image_caption'>Location of Particles</textarea>
@@ -60,32 +69,32 @@ $(document).ready(function(){
 	<div class="row">
 		<div class="col-xs-2">
 	<table style="border: 1px solid lightgrey;">
-		<tr><td><input type="radio" name="gravity" value="topleft"></td><td>&nbsp;</td><td><input type="radio" name="gravity" value="topright"></td></tr>
+		<tr><td><input type="radio" name="gravity" id="tl" value="topleft"></td><td>&nbsp;</td><td><input type="radio" name="gravity" id="tr" value="topright"></td></tr>
 		<tr><td></td><td></td><td></td></tr>
-		<tr><td><input type="radio" name="gravity" value="bottomleft" checked></td><td>&nbsp;</td><td><input type="radio" name="gravity" value="bottomright"></td></tr>
+		<tr><td><input type="radio" name="gravity" id="bl" value="bottomleft" checked></td><td>&nbsp;</td><td><input type="radio" name="gravity" id="br" value="bottomright"></td></tr>
 	</table>
     </div>
     <div class="col-xs-10">
 			<div class="form-group">
 				<label class="radio-inline">
-      		<input type="radio" name="fontSize" value="12">Small
+      		<input type="radio" name="fontSize" id="ss" value="12">Small
     		</label>
 				<label class="radio-inline">
-      		<input type="radio" name="fontSize" value="16" checked>Medium
+      		<input type="radio" name="fontSize" id="sm" value="16" checked>Medium
     		</label>
 				<label class="radio-inline">
-      		<input type="radio" name="fontSize" value="20">Large
+      		<input type="radio" name="fontSize" id="sl" value="20">Large
     		</label>
 			</div>
 			<div class="form-group">
 				<label class="radio-inline">
-      		<input type="radio" name="fontColor" value="white">White
+      		<input type="radio" name="fontColor" id="cw" value="white">White
     		</label>
 				<label class="radio-inline">
-      		<input type="radio" name="fontColor" value="black" checked>Black
+      		<input type="radio" name="fontColor" id="ck" value="black" checked>Black
     		</label>
 				<label class="radio-inline">
-      		<input type="radio" name="fontColor" value="blue">Blue
+      		<input type="radio" name="fontColor" id="cb" value="blue">Blue
     		</label>
 			</div>
 		</div>
@@ -93,18 +102,21 @@ $(document).ready(function(){
 	<div class="form-group">
 		<label>Time Display Format</label>
 	<div class="radio">
-	  <label><input type="radio" name="timedisplay" value="utctime" checked><span id="utctime"></span></label>
+	  <label><input type="radio" name="timedisplay" id="tiu" value="utctime" checked><span id="utctime"></span></label>
 	</div>
 	<div class="radio">
-	  <label><input type="radio" name="timedisplay" value="localtime"><span id="localtime"></span></label>
+	  <label><input type="radio" name="timedisplay" id="til" value="localtime"><span id="localtime"></span></label>
 	</div>
 	</div>
-		<button class='btn btn-success' id="exportWithCaptionBtn" onclick="downloadMap();">Save Current Image</button>
+	<button id="share" class="btn btn-success" style="display: block; visibility: hidden"  onclick="handleShareClick();">Copy Share Link</button>
+	<button class='btn btn-success' id="exportWithCaptionBtn" onclick="downloadMap();">Save Current Image</button>
 		<br/><br/>
-		<p>Particulate is brought to you by the <a href="http://www.marine.ie/">Irish Marine Institute</a>.</p>
-		<p><a href="http://github.com/irishmarineinstitute/particulate">View this project on github</a>.</p>
+		<p>Particulate is brought to you by the <a href="https://www.marine.ie/">Irish Marine Institute</a>.</p>
+		<p><a href="https://github.com/irishmarineinstitute/particulate">View this project on github</a>.</p>
 
 	</div>
+  </form>
+
 
 <script>
 var current_draw = 0;
@@ -155,7 +167,7 @@ var colour_layer = function(series){
   };
 }
 
-var create_timeseries_play_map = function(times,series,bounds){
+var create_timeseries_play_map = function(times,series,bounds,initial_time){
 	  $("#play_map").empty();
 		if(map){
 			map.remove();
@@ -172,7 +184,7 @@ var create_timeseries_play_map = function(times,series,bounds){
     var timeDimension = new L.TimeDimension({
          times: times,
          series: series,
-         currentTime: times[0]
+         currentTime: initial_time? initial_time : times[0]
     });
     map.timeDimension = timeDimension;
     var player = new L.TimeDimension.Player({
@@ -191,12 +203,12 @@ var create_timeseries_play_map = function(times,series,bounds){
     var timeDimensionControl = new L.Control.TimeDimension(timeDimensionControlOptions);
     map.addControl(timeDimensionControl);
 
-  var osmLayer = L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
+  var osmLayer = L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
-	var osmbwLayer = L.tileLayer('http://{s}.tiles.wmflabs.org/bw-mapnik/{z}/{x}/{y}.png', {
+	var osmbwLayer = L.tileLayer('https://{s}.tiles.wmflabs.org/bw-mapnik/{z}/{x}/{y}.png', {
 		maxZoom: 18,
-		attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+		attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 	});
   var heatMapLayer = L.timeDimension.layer.sodaHeatMap({series: series});
   heatMapLayer.addTo(map);
@@ -209,7 +221,7 @@ var create_timeseries_play_map = function(times,series,bounds){
 }
 
 
-var renderNetCDF = function(data,basename){
+var renderNetCDF = function(data,basename,initial_time,cb){
     var reader = new netcdfjs(data);
 		image_basename = basename;
     var time = reader.getDataVariable('time');
@@ -240,9 +252,8 @@ var renderNetCDF = function(data,basename){
 			var lats = lat[i];
 			var lons = lon[i];
 			for(var j=0;j<lats.length;j++){
-				if(isNaN(lats[j]) || isNaN(lons[j])){
+				if(isNaN(lats[j]) || isNaN(lons[j]))
 					continue;
-				}
 				points.push([lats[j],lons[j]]);
 				latmin = Math.min(latmin,lats[j]);
 				latmax = Math.max(latmax,lats[j]);
@@ -253,7 +264,8 @@ var renderNetCDF = function(data,basename){
 			series.push({timestamp: date.toISOString2(), points: points});
 			times.push(date.getTime());
 		}
-		map = create_timeseries_play_map(times,series, L.latLngBounds([latmin,lonmin],[latmax,lonmax]));
+		map = create_timeseries_play_map(times,series, L.latLngBounds([latmin,lonmin],[latmax,lonmax]),initial_time);
+    if(cb) cb();
   }
 
 </script>
@@ -298,6 +310,40 @@ function handleFileSelect(evt) {
 	}
   reader.readAsArrayBuffer(evt.target.files[0]);
 }
+
+function fetchNcUrl(e,initial_time) {
+  document.getElementById('share').style.visibility = "hidden";
+  var url = document.getElementById('ncurl').value;
+  if(url){
+    httpGetNetCDF(url, initial_time, function(){document.getElementById('share').style.visibility = "visible";});
+  }
+}
+function handleShareClick(e){
+  var params = toObj(document.getElementById('params'));
+  if(map.timeDimension){
+    params.current_time = map.timeDimension.getCurrentTime();
+  }
+  var json = JSON.stringify(params);
+  var url =document.location.href.split('#')[0] + "#" + btoa(json);
+  copyToClipboard(url);
+  alert("A sharing link has been copied to the clipboard; You can paste it into your browser or document.")
+}
+  function toObj( form ) {
+    // see https://codepen.io/gabrieleromanato/pen/LpLVeQ
+    var obj = {};
+    var elements = form.querySelectorAll( "input, select, textarea" );
+    for( var i = 0; i < elements.length; ++i ) {
+      var element = elements[i];
+      var key = element.id;
+      var value = element.type == "radio" ? element.checked : element.value;
+
+      if( key ) {
+        obj[ key ] = value;
+      }
+    }
+
+    return obj;
+  }
 
 
 function errorHandler(evt) {
@@ -360,16 +406,61 @@ function basename(str)
         base = base.substring(0, base.lastIndexOf("."));
    return base;
 }
-var httpGetNetCDF = function(url){
+var httpGetNetCDF = function(url,initial_time,cb){
 	var xhr = new XMLHttpRequest();
 	xhr.open("GET", url, true);
 	xhr.responseType = "arraybuffer";
 	xhr.addEventListener("load", function () {
 		if (xhr.status === 200) {
-			renderNetCDF(xhr.response,basename(url));
+			renderNetCDF(xhr.response,basename(url),initial_time,cb);
 		}
 	});
 	xhr.send();
+}
+var loadFromUrl = function(hash){
+  try{
+    var json = atob(hash);
+    var o = JSON.parse(json);
+    //console.log(o);
+    Object.keys(o).forEach((id) => {
+      var el = document.getElementById(id);
+      if(el){
+        if(el.type == "radio"){
+          el.checked = o[id]?true:false;
+          return;
+        }
+        el.value = o[id];
+      }
+
+    });
+    fetchNcUrl(null,o.current_time);
+    removeHash();
+  }catch(e){
+    console.log(e);
+    alert("Sorry. Particulate could not load the given address.");
+  } 
+}
+var copyToClipboard = function(str){
+  // see https://hackernoon.com/copying-text-to-clipboard-with-javascript-df4d4988697f
+  var el = document.createElement('textarea');
+  el.value = str;
+  el.setAttribute('readonly', '');
+  el.style.position = 'absolute';
+  el.style.left = '-9999px';
+  document.body.appendChild(el);
+  el.select();
+  document.execCommand('copy');
+  document.body.removeChild(el);
+};
+function removeHash () {
+  //https://stackoverflow.com/questions/1397329/how-to-remove-the-hash-from-window-location-url-with-javascript-without-page-r/5298684#5298684
+    history.pushState("", document.title, window.location.pathname
+                                                       + window.location.search);
+}
+function loadFromDocumentLocationHash(){
+  if(document.location.hash && document.location.hash.length > 1){
+    loadFromUrl(document.location.hash.substring(1));
+  }
 }
 </script>
 </body>
